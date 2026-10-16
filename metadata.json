@@ -1,0 +1,10 @@
+{
+  "name": "Vocabulaire Lecture",
+  "description": "Numérisez vos pages de livre avec l'appareil photo, touchez un mot pour l'extraire par OCR et enrichissez votre dictionnaire de vocabulaire personnel.",
+  "requestFramePermissions": [
+    "android.permission.CAMERA"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
