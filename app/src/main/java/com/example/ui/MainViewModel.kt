@@ -12,6 +12,7 @@ import com.example.ocr.DetectedWord
 import com.example.ocr.OcrProcessor
 import com.example.ocr.OcrScanResult
 import com.example.ocr.SampleBookPages
+import com.example.translation.TranslationManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -68,19 +69,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val list1Id = repository.insertList(
                     VocabularyListEntity(
                         name = "Le Petit Prince",
-                        description = "Mots et citations poétiques du conte d'Antoine de Saint-Exupéry"
+                        description = "Mots et citations poétiques du conte d'Antoine de Saint-Exupéry",
+                        sourceLanguage = "fr",
+                        targetLanguage = "en"
                     )
                 )
                 val list2Id = repository.insertList(
                     VocabularyListEntity(
                         name = "Les Misérables",
-                        description = "Vocabulaire classique et philosophique de Victor Hugo"
+                        description = "Vocabulaire classique et philosophique de Victor Hugo",
+                        sourceLanguage = "fr",
+                        targetLanguage = "en"
                     )
                 )
                 val list3Id = repository.insertList(
                     VocabularyListEntity(
-                        name = "Rome tome 1",
-                        description = "Lecture historique et vocabulaire latin / antique"
+                        name = "Someone Like You",
+                        description = "Lecture littéraire en anglais (Roald Dahl)",
+                        sourceLanguage = "en",
+                        targetLanguage = "fr"
                     )
                 )
 
@@ -91,6 +98,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         listId = list1Id,
                         listName = "Le Petit Prince",
                         word = "Éphémère",
+                        translation = "Ephemeral",
                         definition = "Qui ne dure que très peu de temps, passager.",
                         contextSentence = "Les fleurs sont si éphémères !",
                         isFavorite = true
@@ -101,6 +109,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         listId = list1Id,
                         listName = "Le Petit Prince",
                         word = "Apprivoiser",
+                        translation = "To tame",
                         definition = "Rendre plus traitable, créer des liens d'affection réciproque.",
                         contextSentence = "Si tu m'apprivoises, nous aurons besoin l'un de l'autre.",
                         isFavorite = false
@@ -111,9 +120,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         listId = list2Id,
                         listName = "Les Misérables",
                         word = "Ineffable",
+                        translation = "Ineffable",
                         definition = "Qu'on ne peut exprimer par des paroles en raison de sa beauté ou intensité.",
                         contextSentence = "Il contemplait dans cette ombre silencieuse l'ineffable clarté du devoir.",
                         isFavorite = true
+                    )
+                )
+                repository.insert(
+                    VocabularyEntity(
+                        listId = list3Id,
+                        listName = "Someone Like You",
+                        word = "Yearning",
+                        translation = "Désir ardent / nostalgie",
+                        definition = "Sentiment profond et mélancolique de désir ou d'attente.",
+                        contextSentence = "He stared out the window with an aching yearning.",
+                        isFavorite = false
                     )
                 )
             } else {
@@ -215,14 +236,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Crée une nouvelle liste de vocabulaire (ex: "Rome tome 1").
+     * Crée une nouvelle liste de vocabulaire avec sa paire de langues (ex: "Rome tome 1", "fr" -> "en").
      */
-    fun createList(name: String, description: String = "", onCreated: ((Long) -> Unit)? = null) {
+    fun createList(
+        name: String,
+        description: String = "",
+        sourceLanguage: String = "fr",
+        targetLanguage: String = "en",
+        onCreated: ((Long) -> Unit)? = null
+    ) {
         viewModelScope.launch(Dispatchers.IO) {
             val trimmedName = name.trim()
             if (trimmedName.isNotBlank()) {
                 val newId = repository.insertList(
-                    VocabularyListEntity(name = trimmedName, description = description.trim())
+                    VocabularyListEntity(
+                        name = trimmedName,
+                        description = description.trim(),
+                        sourceLanguage = sourceLanguage.trim().lowercase(),
+                        targetLanguage = targetLanguage.trim().lowercase()
+                    )
                 )
                 _activeListId.value = newId
                 withContext(Dispatchers.Main) {
@@ -327,12 +359,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
+     * Traduit un mot d'une langue source vers une langue cible via Google ML Kit Translate on-device.
+     */
+    suspend fun translateWord(text: String, sourceLang: String, targetLang: String): Result<String> {
+        return TranslationManager.translate(text, sourceLang, targetLang)
+    }
+
+    /**
      * Enregistre le mot dans la base Room rattaché à une liste.
      */
     fun saveWord(
         word: String,
-        definition: String,
-        contextSentence: String,
+        translation: String = "",
+        definition: String = "",
+        contextSentence: String = "",
         listId: Long? = null,
         listName: String = ""
     ) {
@@ -350,6 +390,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 listId = targetListId,
                 listName = resolvedListName,
                 word = word.trim(),
+                translation = translation.trim(),
                 definition = definition.trim(),
                 contextSentence = contextSentence.trim(),
                 timestamp = System.currentTimeMillis()

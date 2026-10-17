@@ -99,8 +99,10 @@ class ExampleRobolectricTest {
         val dao = db.vocabularyDao()
         val listId = dao.insertList(
             com.example.data.VocabularyListEntity(
-                name = "Rome tome 1",
-                description = "Vocabulaire du premier tome"
+                name = "Someone Like You",
+                description = "Vocabulaire en anglais",
+                sourceLanguage = "en",
+                targetLanguage = "fr"
             )
         )
         assertTrue(listId > 0)
@@ -108,21 +110,38 @@ class ExampleRobolectricTest {
         dao.insert(
             VocabularyEntity(
                 listId = listId,
-                listName = "Rome tome 1",
-                word = "Centurion",
-                definition = "Officier commandant une centurie.",
-                contextSentence = "Le centurion leva son glaive."
+                listName = "Someone Like You",
+                word = "Yearning",
+                translation = "Désir ardent",
+                definition = "Sentiment profond de regret ou de désir.",
+                contextSentence = "An aching yearning in his heart."
             )
         )
 
         val wordsInList = dao.getWordsByListId(listId).first()
         assertEquals(1, wordsInList.size)
-        assertEquals("Centurion", wordsInList[0].word)
-        assertEquals("Rome tome 1", wordsInList[0].listName)
+        assertEquals("Yearning", wordsInList[0].word)
+        assertEquals("Désir ardent", wordsInList[0].translation)
+        assertEquals("Someone Like You", wordsInList[0].listName)
+
+        val fetchedList = dao.getListById(listId)
+        assertNotNull(fetchedList)
+        assertEquals("en", fetchedList?.sourceLanguage)
+        assertEquals("fr", fetchedList?.targetLanguage)
     }
 
     @Test
-    fun `test AppDatabase singleton initialization with version 4`() {
+    fun `test translation manager language mappings`() {
+        val fr = com.example.translation.TranslationManager.getLanguage("fr")
+        assertEquals("Français", fr.displayName)
+        val en = com.example.translation.TranslationManager.getLanguage("en")
+        assertEquals("Anglais", en.displayName)
+        val ar = com.example.translation.TranslationManager.getLanguage("ar")
+        assertEquals("Arabe", ar.displayName)
+    }
+
+    @Test
+    fun `test AppDatabase singleton initialization with version 5`() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val appDb = AppDatabase.getDatabase(context)
         assertNotNull(appDb)

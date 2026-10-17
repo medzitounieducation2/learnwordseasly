@@ -25,7 +25,9 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.FormatListBulleted
+import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
@@ -33,8 +35,10 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -49,6 +53,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -66,6 +71,8 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.data.VocabularyListEntity
 import com.example.ocr.DetectedWord
+import com.example.translation.TranslationManager
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -75,15 +82,22 @@ fun WordSaveDialog(
     initialSelectedListId: Long?,
     onDismiss: () -> Unit,
     onSpeak: (String) -> Unit,
-    onCreateNewList: (String, (Long) -> Unit) -> Unit,
-    onSave: (word: String, definition: String, contextSentence: String, listId: Long, listName: String) -> Unit
+    onTranslate: suspend (text: String, sourceLang: String, targetLang: String) -> Result<String>,
+    onCreateNewList: (name: String, description: String, sourceLang: String, targetLang: String, (Long) -> Unit) -> Unit,
+    onSave: (word: String, translation: String, definition: String, contextSentence: String, listId: Long, listName: String) -> Unit
 ) {
     val focusManager = LocalFocusManager.current
+    val coroutineScope = rememberCoroutineScope()
     val contextFocusRequester = remember { FocusRequester() }
 
     var word by remember(detectedWord) { mutableStateOf(detectedWord.cleanWord) }
+    var translation by remember(detectedWord) { mutableStateOf("") }
     var definition by remember(detectedWord) { mutableStateOf("") }
     var contextSentence by remember(detectedWord) { mutableStateOf(detectedWord.lineText) }
+
+    // État Traduction
+    var isTranslating by remember { mutableStateOf(false) }
+    var translationErrorMessage by remember { mutableStateOf<String?>(null) }
 
     // Sélection de la liste
     var selectedListId by remember(availableLists, initialSelectedListId) {
@@ -94,10 +108,15 @@ fun WordSaveDialog(
     }
 
     var isListDropdownExpanded by remember { mutableStateOf(false) }
+
+    // Dialogue création de liste
     var showCreateListDialog by remember { mutableStateOf(false) }
     var newListNameInput by remember { mutableStateOf("") }
+    var newListDescInput by remember { mutableStateOf("") }
+    var newListSourceLang by remember { mutableStateOf("fr") }
+    var newListTargetLang by remember { mutableStateOf("en") }
 
-    // État d'édition inline du contexte sans aucun bouton additionnel
+    // Édition inline du contexte
     var isEditingContext by remember { mutableStateOf(false) }
     var hasGainedContextFocus by remember { mutableStateOf(false) }
 
@@ -108,7 +127,9 @@ fun WordSaveDialog(
         }
     }
 
-    val selectedList = availableLists.find { it.id == selectedListId }
+    val selectedList = availableLists.find { it.id == selectedListId } ?: availableLists.firstOrNull()
+    val sourceLangCode = selectedList?.sourceLanguage ?: "fr"
+    val targetLangCode = selectedList?.targetLanguage ?: "en"
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -132,7 +153,7 @@ fun WordSaveDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(24.dp)
+                    .padding(22.dp)
                     .verticalScroll(rememberScrollState())
             ) {
                 // En-tête de la modale
@@ -146,9 +167,9 @@ fun WordSaveDialog(
                             imageVector = Icons.Default.BookmarkAdd,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.secondary,
-                            modifier = Modifier.size(28.dp)
+                            modifier = Modifier.size(26.dp)
                         )
-                        Spacer(modifier = Modifier.width(10.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = "Mot extrait",
                             style = MaterialTheme.typography.titleMedium,
@@ -158,167 +179,227 @@ fun WordSaveDialog(
                     }
                     IconButton(
                         onClick = onDismiss,
-                        modifier = Modifier.testTag("close_save_dialog_button")
+                        modifier = Modifier.size(36.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
                             contentDescription = "Fermer",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            tint = MaterialTheme.colorScheme.outline
                         )
                     }
                 }
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Sélecteur de liste
+                // Fiche du mot principal avec prononciation
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "MOT DÉTECTÉ",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.sp
+                            )
+                            Text(
+                                text = word,
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                        IconButton(
+                            onClick = { onSpeak(word) },
+                            modifier = Modifier
+                                .background(
+                                    MaterialTheme.colorScheme.surface,
+                                    shape = RoundedCornerShape(12.dp)
+                                )
+                                .size(42.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.VolumeUp,
+                                contentDescription = "Écouter la prononciation",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Sélecteur de liste + Affichage de la paire de langues de la liste
                 Text(
                     text = "Ajouter à la liste :",
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(modifier = Modifier.height(6.dp))
 
-                Box(modifier = Modifier.fillMaxWidth()) {
-                    OutlinedCard(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { isListDropdownExpanded = true }
-                            .testTag("select_list_dropdown_card"),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 14.dp, vertical = 12.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Default.FormatListBulleted,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.secondary,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Text(
-                                    text = selectedList?.name ?: "Sélectionner une liste",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Medium,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                            }
-                            Icon(
-                                imageVector = Icons.Default.ArrowDropDown,
-                                contentDescription = "Choisir la liste"
-                            )
-                        }
-                    }
-
-                    DropdownMenu(
-                        expanded = isListDropdownExpanded,
-                        onDismissRequest = { isListDropdownExpanded = false }
-                    ) {
-                        availableLists.forEach { item ->
-                            DropdownMenuItem(
-                                text = { Text(item.name) },
-                                onClick = {
-                                    selectedListId = item.id
-                                    isListDropdownExpanded = false
-                                }
-                            )
-                        }
-                        DropdownMenuItem(
-                            text = {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        imageVector = Icons.Default.Add,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.secondary,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = "Créer une nouvelle liste...",
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.secondary
-                                    )
-                                }
-                            },
-                            onClick = {
-                                isListDropdownExpanded = false
-                                newListNameInput = ""
-                                showCreateListDialog = true
-                            }
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                // Champ d'édition du mot extrait + bouton d'écoute audio
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    OutlinedTextField(
-                        value = word,
-                        onValueChange = { word = it },
-                        label = { Text("Mot à enregistrer") },
-                        singleLine = true,
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("extracted_word_input"),
-                        textStyle = MaterialTheme.typography.titleLarge.copy(
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    )
+                    Box(modifier = Modifier.weight(1f)) {
+                        OutlinedCard(
+                            onClick = { isListDropdownExpanded = true },
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.FormatListBulleted,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.secondary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = selectedList?.name ?: "Sélectionner une liste",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                                Icon(
+                                    imageVector = Icons.Default.ArrowDropDown,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.outline
+                                )
+                            }
+                        }
+
+                        DropdownMenu(
+                            expanded = isListDropdownExpanded,
+                            onDismissRequest = { isListDropdownExpanded = false },
+                            modifier = Modifier.fillMaxWidth(0.75f)
+                        ) {
+                            availableLists.forEach { item ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = item.name,
+                                                fontWeight = if (item.id == selectedListId) FontWeight.Bold else FontWeight.Normal,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            LanguagePairBadge(
+                                                sourceLangCode = item.sourceLanguage,
+                                                targetLangCode = item.targetLanguage
+                                            )
+                                        }
+                                    },
+                                    onClick = {
+                                        selectedListId = item.id
+                                        isListDropdownExpanded = false
+                                        translationErrorMessage = null
+                                    }
+                                )
+                            }
+                        }
+                    }
+
                     Spacer(modifier = Modifier.width(8.dp))
-                    IconButton(
-                        onClick = { onSpeak(word) },
-                        modifier = Modifier
-                            .testTag("speak_word_button")
-                            .background(
-                                color = MaterialTheme.colorScheme.primaryContainer,
-                                shape = RoundedCornerShape(12.dp)
-                            )
-                            .size(54.dp)
+
+                    FilledTonalButton(
+                        onClick = {
+                            newListNameInput = ""
+                            newListDescInput = ""
+                            newListSourceLang = "fr"
+                            newListTargetLang = "en"
+                            showCreateListDialog = true
+                        },
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.testTag("create_new_list_button_dialog")
                     ) {
                         Icon(
-                            imageVector = Icons.Default.VolumeUp,
-                            contentDescription = "Écouter la prononciation",
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "Nouvelle liste",
+                            modifier = Modifier.size(18.dp)
                         )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Liste", fontSize = 12.sp)
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                // Badge de langues de la liste
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Langues de la liste : ",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    LanguagePairBadge(
+                        sourceLangCode = sourceLangCode,
+                        targetLangCode = targetLangCode
+                    )
+                }
 
-                // Contexte extrait de la page (cliquable pour édition en ligne, retour à la normale au clic dehors)
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Bloc Contexte
                 Card(
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    ),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .testTag("context_sentence_card")
-                        .clickable(enabled = !isEditingContext) {
-                            isEditingContext = true
-                        },
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (isEditingContext)
-                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f)
-                        else
-                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                    ),
-                    shape = RoundedCornerShape(12.dp)
+                        .clickable { isEditingContext = true }
                 ) {
                     Column(modifier = Modifier.padding(12.dp)) {
-                        Text(
-                            text = "Contexte :",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Contexte :",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.secondary,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = if (isEditingContext) "Touche Entrée ou touche l'extérieur pour valider" else "Toucher pour modifier",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontSize = 10.sp,
+                                color = MaterialTheme.colorScheme.outline
+                            )
+                        }
                         Spacer(modifier = Modifier.height(4.dp))
+
                         if (isEditingContext) {
                             OutlinedTextField(
                                 value = contextSentence,
@@ -332,18 +413,9 @@ fun WordSaveDialog(
                                         } else if (hasGainedContextFocus) {
                                             isEditingContext = false
                                         }
-                                    }
-                                    .testTag("context_sentence_input"),
-                                textStyle = MaterialTheme.typography.bodyMedium.copy(
-                                    fontStyle = FontStyle.Italic,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                ),
-                                placeholder = {
-                                    Text(
-                                        "Corriger ou saisir le contexte...",
-                                        style = MaterialTheme.typography.bodyMedium.copy(fontStyle = FontStyle.Italic)
-                                    )
-                                },
+                                    },
+                                textStyle = MaterialTheme.typography.bodyMedium.copy(fontStyle = FontStyle.Italic),
+                                minLines = 2,
                                 maxLines = 4,
                                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                                 keyboardActions = KeyboardActions(onDone = {
@@ -365,14 +437,117 @@ fun WordSaveDialog(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
-                // Champ Définition ou note
+                // Champ Traduction avec bouton "Traduire" à la demande
+                val targetLangInfo = TranslationManager.getLanguage(targetLangCode)
+                val sourceLangInfo = TranslationManager.getLanguage(sourceLangCode)
+
+                Text(
+                    text = "Traduction (${targetLangInfo.flag} ${targetLangInfo.displayName}) :",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = translation,
+                        onValueChange = {
+                            translation = it
+                            translationErrorMessage = null
+                        },
+                        placeholder = { Text("Ex: sens dans ${targetLangInfo.displayName}...") },
+                        singleLine = true,
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("word_translation_input")
+                    )
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    Button(
+                        onClick = {
+                            if (word.isNotBlank()) {
+                                isTranslating = true
+                                translationErrorMessage = null
+                                coroutineScope.launch {
+                                    val res = onTranslate(word, sourceLangCode, targetLangCode)
+                                    res.onSuccess { translatedText ->
+                                        translation = translatedText
+                                        translationErrorMessage = null
+                                    }.onFailure { ex ->
+                                        translationErrorMessage = ex.message ?: "Échec de la traduction"
+                                    }
+                                    isTranslating = false
+                                }
+                            }
+                        },
+                        enabled = word.isNotBlank() && !isTranslating,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.tertiary
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.testTag("translate_word_button")
+                    ) {
+                        if (isTranslating) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                color = MaterialTheme.colorScheme.onTertiary,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Translate,
+                                contentDescription = "Traduire",
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Traduire", fontSize = 13.sp)
+                        }
+                    }
+                }
+
+                // Message d'erreur de traduction si applicable
+                if (translationErrorMessage != null) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ErrorOutline,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = translationErrorMessage!!,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Champ Définition ou note personnelle
                 OutlinedTextField(
                     value = definition,
                     onValueChange = { definition = it },
                     label = { Text("Définition ou note personnelle (optionnel)") },
-                    placeholder = { Text("Ex: Sens, synonyme ou pensée...") },
+                    placeholder = { Text("Ex: Sens précis, synonyme ou remarque...") },
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("word_definition_input"),
@@ -396,7 +571,7 @@ fun WordSaveDialog(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(22.dp))
 
                 // Boutons d'action
                 Row(
@@ -414,7 +589,7 @@ fun WordSaveDialog(
                         onClick = {
                             if (word.isNotBlank()) {
                                 val currentListName = availableLists.find { it.id == selectedListId }?.name ?: ""
-                                onSave(word, definition, contextSentence, selectedListId, currentListName)
+                                onSave(word, translation, definition, contextSentence, selectedListId, currentListName)
                             }
                         },
                         enabled = word.isNotBlank(),
@@ -430,15 +605,15 @@ fun WordSaveDialog(
         }
     }
 
-    // Dialogue pour créer une nouvelle liste depuis l'enregistrement
+    // Dialogue pour créer une nouvelle liste depuis l'enregistrement avec choix des langues
     if (showCreateListDialog) {
         AlertDialog(
             onDismissRequest = { showCreateListDialog = false },
             title = { Text("Nouvelle liste") },
             text = {
-                Column {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                     Text(
-                        text = "Ex: « Rome tome 1 », « Ma voisine me plaît »...",
+                        text = "Ex: « Rome tome 1 », « Someone Like You », « Ma voisine me plaît »...",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -450,13 +625,33 @@ fun WordSaveDialog(
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = newListDescInput,
+                        onValueChange = { newListDescInput = it },
+                        label = { Text("Description (optionnel)") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    LanguagePairSelector(
+                        sourceLanguageCode = newListSourceLang,
+                        targetLanguageCode = newListTargetLang,
+                        onSourceLanguageChange = { newListSourceLang = it },
+                        onTargetLanguageChange = { newListTargetLang = it }
+                    )
                 }
             },
             confirmButton = {
                 Button(
                     onClick = {
                         if (newListNameInput.isNotBlank()) {
-                            onCreateNewList(newListNameInput) { createdId ->
+                            onCreateNewList(
+                                newListNameInput.trim(),
+                                newListDescInput.trim(),
+                                newListSourceLang,
+                                newListTargetLang
+                            ) { createdId ->
                                 selectedListId = createdId
                             }
                             showCreateListDialog = false
@@ -464,7 +659,7 @@ fun WordSaveDialog(
                     },
                     enabled = newListNameInput.isNotBlank()
                 ) {
-                    Text("Créer")
+                    Text("Créer la liste")
                 }
             },
             dismissButton = {

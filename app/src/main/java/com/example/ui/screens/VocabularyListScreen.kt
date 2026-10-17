@@ -65,9 +65,17 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.Translate
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.runtime.rememberCoroutineScope
 import com.example.data.VocabularyEntity
 import com.example.data.VocabularyListEntity
 import com.example.ui.VocabFilter
+import com.example.ui.components.LanguagePairBadge
+import com.example.ui.components.LanguagePairSelector
+import com.example.translation.TranslationManager
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -87,16 +95,18 @@ fun VocabularyListScreen(
     onSearchChange: (String) -> Unit,
     onFilterChange: (VocabFilter) -> Unit,
     onSelectList: (Long?) -> Unit,
-    onCreateList: (String, String) -> Unit,
+    onCreateList: (String, String, String, String) -> Unit,
     onUpdateList: (VocabularyListEntity) -> Unit,
     onDeleteList: (VocabularyListEntity) -> Unit,
     onToggleFavorite: (VocabularyEntity) -> Unit,
     onUpdateWord: (VocabularyEntity) -> Unit,
     onDeleteWord: (VocabularyEntity) -> Unit,
     onSpeak: (String) -> Unit,
-    onNavigateToScan: () -> Unit
+    onNavigateToScan: () -> Unit,
+    onTranslate: suspend (text: String, sourceLang: String, targetLang: String) -> Result<String> = { text, _, _ -> Result.success(text) }
 ) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     var showFlashcards by remember { mutableStateOf(false) }
     var wordToEdit by remember { mutableStateOf<VocabularyEntity?>(null) }
     var wordToDelete by remember { mutableStateOf<VocabularyEntity?>(null) }
@@ -105,6 +115,8 @@ fun VocabularyListScreen(
     var showCreateListDialog by remember { mutableStateOf(false) }
     var newListName by remember { mutableStateOf("") }
     var newListDescription by remember { mutableStateOf("") }
+    var newListSourceLang by remember { mutableStateOf("fr") }
+    var newListTargetLang by remember { mutableStateOf("en") }
 
     var listToEdit by remember { mutableStateOf<VocabularyListEntity?>(null) }
     var listToDelete by remember { mutableStateOf<VocabularyListEntity?>(null) }
@@ -232,7 +244,21 @@ fun VocabularyListScreen(
                             FilterChip(
                                 selected = selectedListId == list.id,
                                 onClick = { onSelectList(list.id) },
-                                label = { Text(list.name, fontSize = 12.sp) },
+                                label = {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(list.name, fontSize = 12.sp)
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = "${list.sourceLanguage.uppercase()}→${list.targetLanguage.uppercase()}",
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (selectedListId == list.id)
+                                                MaterialTheme.colorScheme.onSecondaryContainer
+                                            else
+                                                MaterialTheme.colorScheme.secondary
+                                        )
+                                    }
+                                },
                                 colors = FilterChipDefaults.filterChipColors(
                                     selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
                                     selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer
@@ -282,7 +308,10 @@ fun VocabularyListScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column(modifier = Modifier.weight(1f)) {
+                            Row(
+                                modifier = Modifier.weight(1f),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
                                 Text(
                                     text = if (currentSelectedList.description.isNotBlank())
                                         currentSelectedList.description
@@ -290,6 +319,11 @@ fun VocabularyListScreen(
                                         "Liste : ${currentSelectedList.name}",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                LanguagePairBadge(
+                                    sourceLangCode = currentSelectedList.sourceLanguage,
+                                    targetLangCode = currentSelectedList.targetLanguage
                                 )
                             }
                             Row {
@@ -455,9 +489,9 @@ fun VocabularyListScreen(
             onDismissRequest = { showCreateListDialog = false },
             title = { Text("Nouvelle liste") },
             text = {
-                Column {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                     Text(
-                        text = "Ex: « Rome tome 1 », « Ma voisine me plaît »...",
+                        text = "Ex: « Rome tome 1 », « Someone Like You », « Ma voisine me plaît »...",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -476,13 +510,26 @@ fun VocabularyListScreen(
                         label = { Text("Description (optionnel)") },
                         modifier = Modifier.fillMaxWidth()
                     )
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    LanguagePairSelector(
+                        sourceLanguageCode = newListSourceLang,
+                        targetLanguageCode = newListTargetLang,
+                        onSourceLanguageChange = { newListSourceLang = it },
+                        onTargetLanguageChange = { newListTargetLang = it }
+                    )
                 }
             },
             confirmButton = {
                 Button(
                     onClick = {
                         if (newListName.isNotBlank()) {
-                            onCreateList(newListName.trim(), newListDescription.trim())
+                            onCreateList(
+                                newListName.trim(),
+                                newListDescription.trim(),
+                                newListSourceLang,
+                                newListTargetLang
+                            )
                             showCreateListDialog = false
                         }
                     },
@@ -504,12 +551,14 @@ fun VocabularyListScreen(
         val editingList = listToEdit!!
         var editName by remember(editingList) { mutableStateOf(editingList.name) }
         var editDesc by remember(editingList) { mutableStateOf(editingList.description) }
+        var editSourceLang by remember(editingList) { mutableStateOf(editingList.sourceLanguage) }
+        var editTargetLang by remember(editingList) { mutableStateOf(editingList.targetLanguage) }
 
         AlertDialog(
             onDismissRequest = { listToEdit = null },
             title = { Text("Modifier la liste") },
             text = {
-                Column {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                     OutlinedTextField(
                         value = editName,
                         onValueChange = { editName = it },
@@ -524,13 +573,28 @@ fun VocabularyListScreen(
                         label = { Text("Description") },
                         modifier = Modifier.fillMaxWidth()
                     )
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    LanguagePairSelector(
+                        sourceLanguageCode = editSourceLang,
+                        targetLanguageCode = editTargetLang,
+                        onSourceLanguageChange = { editSourceLang = it },
+                        onTargetLanguageChange = { editTargetLang = it }
+                    )
                 }
             },
             confirmButton = {
                 Button(
                     onClick = {
                         if (editName.isNotBlank()) {
-                            onUpdateList(editingList.copy(name = editName.trim(), description = editDesc.trim()))
+                            onUpdateList(
+                                editingList.copy(
+                                    name = editName.trim(),
+                                    description = editDesc.trim(),
+                                    sourceLanguage = editSourceLang,
+                                    targetLanguage = editTargetLang
+                                )
+                            )
                             listToEdit = null
                         }
                     },
@@ -579,22 +643,112 @@ fun VocabularyListScreen(
     if (wordToEdit != null) {
         val editing = wordToEdit!!
         var newWord by remember(editing) { mutableStateOf(editing.word) }
+        var newTranslation by remember(editing) { mutableStateOf(editing.translation) }
         var newDef by remember(editing) { mutableStateOf(editing.definition) }
         var newContext by remember(editing) { mutableStateOf(editing.contextSentence) }
         var editListId by remember(editing) { mutableStateOf(editing.listId) }
+
+        var isTranslatingWord by remember { mutableStateOf(false) }
+        var editTranslationError by remember { mutableStateOf<String?>(null) }
+
+        val selectedEditList = lists.find { it.id == editListId }
+        val editSrcLang = selectedEditList?.sourceLanguage ?: "fr"
+        val editTgtLang = selectedEditList?.targetLanguage ?: "en"
+        val tgtLangInfo = TranslationManager.getLanguage(editTgtLang)
 
         AlertDialog(
             onDismissRequest = { wordToEdit = null },
             title = { Text("Modifier l'entrée") },
             text = {
-                Column {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                     OutlinedTextField(
                         value = newWord,
-                        onValueChange = { newWord = it },
+                        onValueChange = {
+                            newWord = it
+                            editTranslationError = null
+                        },
                         label = { Text("Mot") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Champ Traduction avec bouton Traduire
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedTextField(
+                            value = newTranslation,
+                            onValueChange = {
+                                newTranslation = it
+                                editTranslationError = null
+                            },
+                            label = { Text("Traduction (${tgtLangInfo.flag} ${tgtLangInfo.displayName})") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(
+                            onClick = {
+                                if (newWord.isNotBlank()) {
+                                    isTranslatingWord = true
+                                    editTranslationError = null
+                                    coroutineScope.launch {
+                                        val res = onTranslate(newWord, editSrcLang, editTgtLang)
+                                        res.onSuccess { translated ->
+                                            newTranslation = translated
+                                            editTranslationError = null
+                                        }.onFailure { ex ->
+                                            editTranslationError = ex.message ?: "Échec de la traduction"
+                                        }
+                                        isTranslatingWord = false
+                                    }
+                                }
+                            },
+                            enabled = newWord.isNotBlank() && !isTranslatingWord,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.tertiary
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            if (isTranslatingWord) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    color = MaterialTheme.colorScheme.onTertiary,
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.Translate,
+                                    contentDescription = "Traduire",
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Traduire", fontSize = 12.sp)
+                            }
+                        }
+                    }
+
+                    if (editTranslationError != null) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.ErrorOutline,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = editTranslationError!!,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
                         value = newContext,
@@ -621,6 +775,7 @@ fun VocabularyListScreen(
                         onUpdateWord(
                             editing.copy(
                                 word = newWord.trim(),
+                                translation = newTranslation.trim(),
                                 definition = newDef.trim(),
                                 contextSentence = newContext.trim(),
                                 listId = editListId,
@@ -669,6 +824,7 @@ fun VocabularyListScreen(
     if (showFlashcards) {
         FlashcardsDialog(
             words = words,
+            lists = lists,
             onDismiss = { showFlashcards = false },
             onSpeak = onSpeak
         )
@@ -750,6 +906,29 @@ private fun VocabularyCard(
                             tint = if (entity.isFavorite) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.outline
                         )
                     }
+                }
+            }
+
+            // Traduction mise en avant
+            if (entity.translation.isNotBlank()) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(vertical = 2.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Translate,
+                        contentDescription = "Traduction",
+                        tint = MaterialTheme.colorScheme.secondary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = entity.translation,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
                 }
             }
 

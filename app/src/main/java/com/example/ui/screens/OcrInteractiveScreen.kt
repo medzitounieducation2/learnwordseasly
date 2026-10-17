@@ -81,8 +81,9 @@ fun OcrInteractiveScreen(
     onSelectWordDirectly: (DetectedWord) -> Unit,
     onToggleBoundingBoxes: () -> Unit,
     onCloseSaveDialog: () -> Unit,
-    onCreateNewList: (String, (Long) -> Unit) -> Unit = { _, _ -> },
-    onSaveWord: (word: String, definition: String, contextSentence: String, listId: Long, listName: String) -> Unit,
+    onTranslate: suspend (text: String, sourceLang: String, targetLang: String) -> Result<String> = { text, _, _ -> Result.success(text) },
+    onCreateNewList: (name: String, description: String, sourceLang: String, targetLang: String, (Long) -> Unit) -> Unit = { _, _, _, _, _ -> },
+    onSaveWord: (word: String, translation: String, definition: String, contextSentence: String, listId: Long, listName: String) -> Unit,
     onSpeak: (String) -> Unit,
     onNavigateToCamera: () -> Unit,
     onLoadSampleBook: (Int) -> Unit
@@ -378,6 +379,7 @@ fun OcrInteractiveScreen(
                 initialSelectedListId = activeListId,
                 onDismiss = onCloseSaveDialog,
                 onSpeak = onSpeak,
+                onTranslate = onTranslate,
                 onCreateNewList = onCreateNewList,
                 onSave = onSaveWord
             )

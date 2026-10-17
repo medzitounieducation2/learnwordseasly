@@ -187,11 +187,14 @@ fun VocabulaireLectureApp(viewModel: MainViewModel) {
                         onCloseSaveDialog = {
                             viewModel.closeSaveDialog()
                         },
-                        onCreateNewList = { name, callback ->
-                            viewModel.createList(name, onCreated = callback)
+                        onCreateNewList = { name, desc, src, tgt, callback ->
+                            viewModel.createList(name, desc, src, tgt, onCreated = callback)
                         },
-                        onSaveWord = { word, def, context, listId, listName ->
-                            viewModel.saveWord(word, def, context, listId, listName)
+                        onTranslate = { text, src, tgt ->
+                            viewModel.translateWord(text, src, tgt)
+                        },
+                        onSaveWord = { word, translation, def, context, listId, listName ->
+                            viewModel.saveWord(word, translation, def, context, listId, listName)
                         },
                         onSpeak = { text ->
                             viewModel.speak(text)
@@ -215,14 +218,15 @@ fun VocabulaireLectureApp(viewModel: MainViewModel) {
                         onSearchChange = { viewModel.searchQuery.value = it },
                         onFilterChange = { viewModel.filterType.value = it },
                         onSelectList = { viewModel.selectList(it) },
-                        onCreateList = { name, desc -> viewModel.createList(name, desc) },
+                        onCreateList = { name, desc, src, tgt -> viewModel.createList(name, desc, src, tgt) },
                         onUpdateList = { viewModel.updateList(it) },
                         onDeleteList = { viewModel.deleteList(it) },
                         onToggleFavorite = { viewModel.toggleFavorite(it) },
                         onUpdateWord = { viewModel.updateWord(it) },
                         onDeleteWord = { viewModel.deleteWord(it) },
                         onSpeak = { viewModel.speak(it) },
-                        onNavigateToScan = { viewModel.setTab(AppTab.SCANNER) }
+                        onNavigateToScan = { viewModel.setTab(AppTab.SCANNER) },
+                        onTranslate = { text, src, tgt -> viewModel.translateWord(text, src, tgt) }
                     )
                 }
             }
