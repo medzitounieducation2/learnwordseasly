@@ -26,7 +26,6 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FormatListBulleted
-import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
@@ -72,20 +71,18 @@ import com.example.ocr.DetectedWord
 @Composable
 fun WordSaveDialog(
     detectedWord: DetectedWord,
-    initialBookTitle: String,
     availableLists: List<VocabularyListEntity>,
     initialSelectedListId: Long?,
     onDismiss: () -> Unit,
     onSpeak: (String) -> Unit,
     onCreateNewList: (String, (Long) -> Unit) -> Unit,
-    onSave: (word: String, definition: String, contextSentence: String, bookTitle: String, listId: Long, listName: String) -> Unit
+    onSave: (word: String, definition: String, contextSentence: String, listId: Long, listName: String) -> Unit
 ) {
     val focusManager = LocalFocusManager.current
     val contextFocusRequester = remember { FocusRequester() }
 
     var word by remember(detectedWord) { mutableStateOf(detectedWord.cleanWord) }
     var definition by remember(detectedWord) { mutableStateOf("") }
-    var bookTitle by remember(initialBookTitle) { mutableStateOf(initialBookTitle) }
     var contextSentence by remember(detectedWord) { mutableStateOf(detectedWord.lineText) }
 
     // Sélection de la liste
@@ -173,7 +170,7 @@ fun WordSaveDialog(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Sélecteur de liste (Carnet / Ouvrage)
+                // Sélecteur de liste
                 Text(
                     text = "Ajouter à la liste :",
                     style = MaterialTheme.typography.labelMedium,
@@ -299,7 +296,7 @@ fun WordSaveDialog(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Contexte extrait de la page du livre (cliquable pour édition en ligne, retour à la normale au clic dehors)
+                // Contexte extrait de la page (cliquable pour édition en ligne, retour à la normale au clic dehors)
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -317,7 +314,7 @@ fun WordSaveDialog(
                 ) {
                     Column(modifier = Modifier.padding(12.dp)) {
                         Text(
-                            text = "Contexte dans l'ouvrage :",
+                            text = "Contexte :",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -399,26 +396,6 @@ fun WordSaveDialog(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Champ Titre du livre
-                OutlinedTextField(
-                    value = bookTitle,
-                    onValueChange = { bookTitle = it },
-                    label = { Text("Titre de l'ouvrage (optionnel)") },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = Icons.Default.MenuBook,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.secondary
-                        )
-                    },
-                    singleLine = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("book_title_input")
-                )
-
                 Spacer(modifier = Modifier.height(24.dp))
 
                 // Boutons d'action
@@ -437,7 +414,7 @@ fun WordSaveDialog(
                         onClick = {
                             if (word.isNotBlank()) {
                                 val currentListName = availableLists.find { it.id == selectedListId }?.name ?: ""
-                                onSave(word, definition, contextSentence, bookTitle, selectedListId, currentListName)
+                                onSave(word, definition, contextSentence, selectedListId, currentListName)
                             }
                         },
                         enabled = word.isNotBlank(),
@@ -457,7 +434,7 @@ fun WordSaveDialog(
     if (showCreateListDialog) {
         AlertDialog(
             onDismissRequest = { showCreateListDialog = false },
-            title = { Text("Créer une nouvelle liste") },
+            title = { Text("Nouvelle liste") },
             text = {
                 Column {
                     Text(

@@ -84,8 +84,7 @@ class ExampleRobolectricTest {
         val entry = VocabularyEntity(
             word = "Sérendipité",
             definition = "Découverte heureuse faite par hasard et sagacité.",
-            contextSentence = "Ce voyage fut une suite de sérendipités.",
-            bookTitle = "Essais Littéraires"
+            contextSentence = "Ce voyage fut une suite de sérendipités."
         )
         val id = dao.insert(entry)
         assertTrue(id > 0)
@@ -112,8 +111,7 @@ class ExampleRobolectricTest {
                 listName = "Rome tome 1",
                 word = "Centurion",
                 definition = "Officier commandant une centurie.",
-                contextSentence = "Le centurion leva son glaive.",
-                bookTitle = "Rome tome 1"
+                contextSentence = "Le centurion leva son glaive."
             )
         )
 

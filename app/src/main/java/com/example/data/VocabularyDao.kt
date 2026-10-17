@@ -17,7 +17,7 @@ interface VocabularyDao {
     @Query("SELECT * FROM vocabulary WHERE listId = :listId ORDER BY timestamp DESC")
     fun getWordsByListId(listId: Long): Flow<List<VocabularyEntity>>
 
-    @Query("SELECT * FROM vocabulary WHERE word LIKE '%' || :query || '%' OR definition LIKE '%' || :query || '%' OR bookTitle LIKE '%' || :query || '%' OR listName LIKE '%' || :query || '%' ORDER BY timestamp DESC")
+    @Query("SELECT * FROM vocabulary WHERE word LIKE '%' || :query || '%' OR definition LIKE '%' || :query || '%' OR contextSentence LIKE '%' || :query || '%' OR listName LIKE '%' || :query || '%' ORDER BY timestamp DESC")
     fun searchWords(query: String): Flow<List<VocabularyEntity>>
 
     @Query("SELECT * FROM vocabulary WHERE isFavorite = 1 ORDER BY timestamp DESC")

@@ -219,10 +219,10 @@ fun FlashcardsDialog(
                                     textAlign = TextAlign.Center,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
-                                if (currentWord.bookTitle.isNotBlank()) {
+                                if (currentWord.listName.isNotBlank()) {
                                     Spacer(modifier = Modifier.height(12.dp))
                                     Text(
-                                        text = "Ouvrage : ${currentWord.bookTitle}",
+                                        text = "Liste : ${currentWord.listName}",
                                         style = MaterialTheme.typography.labelSmall,
                                         fontStyle = FontStyle.Italic,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant

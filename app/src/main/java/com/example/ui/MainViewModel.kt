@@ -93,7 +93,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         word = "Éphémère",
                         definition = "Qui ne dure que très peu de temps, passager.",
                         contextSentence = "Les fleurs sont si éphémères !",
-                        bookTitle = "Le Petit Prince",
                         isFavorite = true
                     )
                 )
@@ -104,7 +103,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         word = "Apprivoiser",
                         definition = "Rendre plus traitable, créer des liens d'affection réciproque.",
                         contextSentence = "Si tu m'apprivoises, nous aurons besoin l'un de l'autre.",
-                        bookTitle = "Le Petit Prince",
                         isFavorite = false
                     )
                 )
@@ -115,7 +113,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         word = "Ineffable",
                         definition = "Qu'on ne peut exprimer par des paroles en raison de sa beauté ou intensité.",
                         contextSentence = "Il contemplait dans cette ombre silencieuse l'ineffable clarté du devoir.",
-                        bookTitle = "Les Misérables",
                         isFavorite = true
                     )
                 )
@@ -155,9 +152,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _showDetectedBoxes = MutableStateFlow(true)
     val showDetectedBoxes: StateFlow<Boolean> = _showDetectedBoxes.asStateFlow()
 
-    private val _currentBookTitle = MutableStateFlow("")
-    val currentBookTitle: StateFlow<String> = _currentBookTitle.asStateFlow()
-
     // Notification toast / snackbar
     private val _userMessage = MutableStateFlow<String?>(null)
     val userMessage: StateFlow<String?> = _userMessage.asStateFlow()
@@ -191,7 +185,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             list = list.filter {
                 it.word.lowercase().contains(q) ||
                 it.definition.lowercase().contains(q) ||
-                it.bookTitle.lowercase().contains(q) ||
                 it.listName.lowercase().contains(q) ||
                 it.contextSentence.lowercase().contains(q)
             }
@@ -273,9 +266,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /**
      * Traite un nouveau Bitmap (capturé par caméra ou sélectionné dans la galerie).
      */
-    fun processImage(bitmap: Bitmap, bookTitle: String = "") {
+    fun processImage(bitmap: Bitmap) {
         _currentBitmap.value = bitmap
-        _currentBookTitle.value = bookTitle
         _selectedWord.value = null
         _ocrError.value = null
         _isOcrLoading.value = true
@@ -304,7 +296,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch(Dispatchers.Default) {
             val bitmap = SampleBookPages.renderPageToBitmap(sample)
             withContext(Dispatchers.Main) {
-                processImage(bitmap, "${sample.title} (${sample.author})")
+                processImage(bitmap)
             }
         }
     }
@@ -341,7 +333,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         word: String,
         definition: String,
         contextSentence: String,
-        bookTitle: String,
         listId: Long? = null,
         listName: String = ""
     ) {
@@ -355,7 +346,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 word = word.trim(),
                 definition = definition.trim(),
                 contextSentence = contextSentence.trim(),
-                bookTitle = bookTitle.trim(),
                 timestamp = System.currentTimeMillis()
             )
             repository.insert(entity)

@@ -142,7 +142,7 @@ fun VocabularyListScreen(
                             color = MaterialTheme.colorScheme.primary
                         )
                         Text(
-                            text = "${words.size} mot${if (words.size > 1) "s" else ""} ${if (currentSelectedList != null) "dans cet ouvrage" else "au total"}",
+                            text = "${words.size} mot${if (words.size > 1) "s" else ""} ${if (currentSelectedList != null) "dans cette liste" else "au total"}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -176,7 +176,7 @@ fun VocabularyListScreen(
                                         summary.append("• ${it.word}")
                                         if (it.definition.isNotBlank()) summary.append(" : ${it.definition}")
                                         if (it.contextSentence.isNotBlank()) summary.append("\n  « ${it.contextSentence} »")
-                                        if (it.bookTitle.isNotBlank()) summary.append(" — ${it.bookTitle}")
+                                        if (it.listName.isNotBlank()) summary.append(" [${it.listName}]")
                                         summary.append("\n")
                                     }
                                     val sendIntent = Intent(Intent.ACTION_SEND).apply {
@@ -453,7 +453,7 @@ fun VocabularyListScreen(
     if (showCreateListDialog) {
         AlertDialog(
             onDismissRequest = { showCreateListDialog = false },
-            title = { Text("Nouvelle liste d'ouvrage") },
+            title = { Text("Nouvelle liste") },
             text = {
                 Column {
                     Text(
@@ -465,7 +465,7 @@ fun VocabularyListScreen(
                     OutlinedTextField(
                         value = newListName,
                         onValueChange = { newListName = it },
-                        label = { Text("Nom de la liste / ouvrage") },
+                        label = { Text("Nom de la liste") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -473,7 +473,7 @@ fun VocabularyListScreen(
                     OutlinedTextField(
                         value = newListDescription,
                         onValueChange = { newListDescription = it },
-                        label = { Text("Description ou tome (optionnel)") },
+                        label = { Text("Description (optionnel)") },
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -580,7 +580,6 @@ fun VocabularyListScreen(
         val editing = wordToEdit!!
         var newWord by remember { mutableStateOf(editing.word) }
         var newDef by remember { mutableStateOf(editing.definition) }
-        var newBook by remember { mutableStateOf(editing.bookTitle) }
         var newContext by remember { mutableStateOf(editing.contextSentence) }
         var editListId by remember { mutableStateOf(editing.listId) }
 
@@ -600,7 +599,7 @@ fun VocabularyListScreen(
                     OutlinedTextField(
                         value = newContext,
                         onValueChange = { newContext = it },
-                        label = { Text("Contexte dans l'ouvrage") },
+                        label = { Text("Contexte") },
                         minLines = 2,
                         maxLines = 4,
                         modifier = Modifier.fillMaxWidth()
@@ -611,14 +610,6 @@ fun VocabularyListScreen(
                         onValueChange = { newDef = it },
                         label = { Text("Définition / note") },
                         minLines = 2,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = newBook,
-                        onValueChange = { newBook = it },
-                        label = { Text("Ouvrage") },
-                        singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -632,7 +623,6 @@ fun VocabularyListScreen(
                                 word = newWord.trim(),
                                 definition = newDef.trim(),
                                 contextSentence = newContext.trim(),
-                                bookTitle = newBook.trim(),
                                 listId = editListId,
                                 listName = currentListName
                             )
@@ -800,26 +790,6 @@ private fun VocabularyCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (entity.bookTitle.isNotBlank()) {
-                        Icon(
-                            imageVector = Icons.Default.MenuBook,
-                            contentDescription = null,
-                            modifier = Modifier.size(14.dp),
-                            tint = MaterialTheme.colorScheme.secondary
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = entity.bookTitle,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.secondary,
-                            fontWeight = FontWeight.Medium
-                        )
-                        Text(
-                            text = " • ",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.outline
-                        )
-                    }
                     Text(
                         text = dateString,
                         style = MaterialTheme.typography.labelSmall,

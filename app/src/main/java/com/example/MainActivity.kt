@@ -60,7 +60,6 @@ fun VocabulaireLectureApp(viewModel: MainViewModel) {
     val selectedWord by viewModel.selectedWord.collectAsStateWithLifecycle()
     val isSaveDialogOpen by viewModel.isSaveDialogOpen.collectAsStateWithLifecycle()
     val showDetectedBoxes by viewModel.showDetectedBoxes.collectAsStateWithLifecycle()
-    val currentBookTitle by viewModel.currentBookTitle.collectAsStateWithLifecycle()
 
     val allLists by viewModel.allLists.collectAsStateWithLifecycle()
     val selectedListId by viewModel.selectedListId.collectAsStateWithLifecycle()
@@ -157,7 +156,7 @@ fun VocabulaireLectureApp(viewModel: MainViewModel) {
                 AppTab.SCANNER -> {
                     CameraCaptureScreen(
                         onImageCaptured = { bitmap ->
-                            viewModel.processImage(bitmap, "Page photographiée")
+                            viewModel.processImage(bitmap)
                         },
                         onLoadSampleBook = { index ->
                             viewModel.loadSamplePage(index)
@@ -174,7 +173,6 @@ fun VocabulaireLectureApp(viewModel: MainViewModel) {
                         selectedWord = selectedWord,
                         isSaveDialogOpen = isSaveDialogOpen,
                         showBoundingBoxes = showDetectedBoxes,
-                        currentBookTitle = currentBookTitle,
                         availableLists = allLists,
                         activeListId = activeListId,
                         onTapCoordinates = { x, y ->
@@ -192,8 +190,8 @@ fun VocabulaireLectureApp(viewModel: MainViewModel) {
                         onCreateNewList = { name, callback ->
                             viewModel.createList(name, onCreated = callback)
                         },
-                        onSaveWord = { word, def, context, book, listId, listName ->
-                            viewModel.saveWord(word, def, context, book, listId, listName)
+                        onSaveWord = { word, def, context, listId, listName ->
+                            viewModel.saveWord(word, def, context, listId, listName)
                         },
                         onSpeak = { text ->
                             viewModel.speak(text)
