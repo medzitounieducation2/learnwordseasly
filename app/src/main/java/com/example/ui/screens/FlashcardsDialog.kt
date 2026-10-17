@@ -61,14 +61,17 @@ fun FlashcardsDialog(
     onSpeak: (String) -> Unit
 ) {
     if (words.isEmpty()) {
-        onDismiss()
+        androidx.compose.runtime.LaunchedEffect(Unit) {
+            onDismiss()
+        }
         return
     }
 
-    var currentIndex by remember { mutableIntStateOf(0) }
+    var currentIndex by remember(words) { mutableIntStateOf(0) }
     var isFlipped by remember { mutableStateOf(false) }
 
-    val currentWord = words[currentIndex]
+    val safeIndex = currentIndex.coerceIn(0, words.size - 1)
+    val currentWord = words[safeIndex]
 
     // Animation de retournement de carte
     val rotation by animateFloatAsState(

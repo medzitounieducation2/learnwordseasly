@@ -215,55 +215,39 @@ fun CameraCaptureScreen(
         AndroidView(
             modifier = Modifier.fillMaxSize(),
             factory = { ctx ->
-                val previewView = PreviewView(ctx).apply {
+                PreviewView(ctx).apply {
                     scaleType = PreviewView.ScaleType.FILL_CENTER
                 }
-                val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
-                cameraProviderFuture.addListener({
-                    val cameraProvider = cameraProviderFuture.get()
-                    val preview = Preview.Builder().build().also {
-                        it.surfaceProvider = previewView.surfaceProvider
-                    }
-                    val cameraSelector = CameraSelector.Builder()
-                        .requireLensFacing(lensFacing)
-                        .build()
-
-                    try {
-                        cameraProvider.unbindAll()
-                        cameraProvider.bindToLifecycle(
-                            lifecycleOwner,
-                            cameraSelector,
-                            preview,
-                            imageCapture
-                        )
-                    } catch (exc: Exception) {
-                        exc.printStackTrace()
-                    }
-                }, ContextCompat.getMainExecutor(ctx))
-                previewView
             },
             update = { previewView ->
-                val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
-                cameraProviderFuture.addListener({
-                    val cameraProvider = cameraProviderFuture.get()
-                    val preview = Preview.Builder().build().also {
-                        it.surfaceProvider = previewView.surfaceProvider
-                    }
-                    val cameraSelector = CameraSelector.Builder()
-                        .requireLensFacing(lensFacing)
-                        .build()
-                    try {
-                        cameraProvider.unbindAll()
-                        cameraProvider.bindToLifecycle(
-                            lifecycleOwner,
-                            cameraSelector,
-                            preview,
-                            imageCapture
-                        )
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                    }
-                }, ContextCompat.getMainExecutor(context))
+                val boundLens = previewView.tag as? Int
+                if (boundLens != lensFacing) {
+                    val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
+                    cameraProviderFuture.addListener({
+                        try {
+                            val cameraProvider = cameraProviderFuture.get()
+                            val cameraSelector = CameraSelector.Builder()
+                                .requireLensFacing(lensFacing)
+                                .build()
+                            if (cameraProvider.hasCamera(cameraSelector)) {
+                                val preview = Preview.Builder().build().also {
+                                    it.surfaceProvider = previewView.surfaceProvider
+                                }
+                                cameraProvider.unbindAll()
+                                cameraProvider.bindToLifecycle(
+                                    lifecycleOwner,
+                                    cameraSelector,
+                                    preview,
+                                    imageCapture
+                                )
+                            }
+                            previewView.tag = lensFacing
+                        } catch (e: Exception) {
+                            previewView.tag = lensFacing
+                            e.printStackTrace()
+                        }
+                    }, ContextCompat.getMainExecutor(context))
+                }
             }
         )
 
@@ -483,17 +467,21 @@ fun CameraCaptureScreen(
  * Convertit un ImageProxy CameraX en Bitmap avec correction de l'orientation rotation.
  */
 private fun imageProxyToBitmap(image: ImageProxy): Bitmap {
-    val planeProxy = image.planes[0]
-    val buffer = planeProxy.buffer
-    val bytes = ByteArray(buffer.remaining())
-    buffer.get(bytes)
-    val original = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+    val bitmap = try {
+        image.toBitmap()
+    } catch (e: Exception) {
+        val planeProxy = image.planes[0]
+        val buffer = planeProxy.buffer
+        val bytes = ByteArray(buffer.remaining())
+        buffer.get(bytes)
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+    } ?: Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
 
     val rotationDegrees = image.imageInfo.rotationDegrees
     return if (rotationDegrees != 0) {
         val matrix = Matrix().apply { postRotate(rotationDegrees.toFloat()) }
-        Bitmap.createBitmap(original, 0, 0, original.width, original.height, matrix, true)
+        Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
     } else {
-        original
+        bitmap
     }
 }

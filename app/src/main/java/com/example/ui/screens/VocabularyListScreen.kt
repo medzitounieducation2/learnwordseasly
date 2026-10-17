@@ -502,8 +502,8 @@ fun VocabularyListScreen(
     // Dialogue Renommer / Modifier la liste
     if (listToEdit != null) {
         val editingList = listToEdit!!
-        var editName by remember { mutableStateOf(editingList.name) }
-        var editDesc by remember { mutableStateOf(editingList.description) }
+        var editName by remember(editingList) { mutableStateOf(editingList.name) }
+        var editDesc by remember(editingList) { mutableStateOf(editingList.description) }
 
         AlertDialog(
             onDismissRequest = { listToEdit = null },
@@ -578,10 +578,10 @@ fun VocabularyListScreen(
     // Dialogue d'édition d'un mot
     if (wordToEdit != null) {
         val editing = wordToEdit!!
-        var newWord by remember { mutableStateOf(editing.word) }
-        var newDef by remember { mutableStateOf(editing.definition) }
-        var newContext by remember { mutableStateOf(editing.contextSentence) }
-        var editListId by remember { mutableStateOf(editing.listId) }
+        var newWord by remember(editing) { mutableStateOf(editing.word) }
+        var newDef by remember(editing) { mutableStateOf(editing.definition) }
+        var newContext by remember(editing) { mutableStateOf(editing.contextSentence) }
+        var editListId by remember(editing) { mutableStateOf(editing.listId) }
 
         AlertDialog(
             onDismissRequest = { wordToEdit = null },

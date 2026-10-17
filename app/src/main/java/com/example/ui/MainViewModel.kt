@@ -340,9 +340,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val targetListId = listId ?: _activeListId.value ?: 1L
             _activeListId.value = targetListId
 
+            val resolvedListName = if (listName.isNotBlank()) {
+                listName
+            } else {
+                repository.getListById(targetListId)?.name ?: ""
+            }
+
             val entity = VocabularyEntity(
                 listId = targetListId,
-                listName = listName,
+                listName = resolvedListName,
                 word = word.trim(),
                 definition = definition.trim(),
                 contextSentence = contextSentence.trim(),
@@ -351,7 +357,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             repository.insert(entity)
             withContext(Dispatchers.Main) {
                 _isSaveDialogOpen.value = false
-                val destination = if (listName.isNotBlank()) " dans « $listName »" else ""
+                val destination = if (resolvedListName.isNotBlank()) " dans « $resolvedListName »" else ""
                 _userMessage.value = "Mot « $word » enregistré$destination !"
             }
         }

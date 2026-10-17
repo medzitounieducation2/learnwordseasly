@@ -120,4 +120,12 @@ class ExampleRobolectricTest {
         assertEquals("Centurion", wordsInList[0].word)
         assertEquals("Rome tome 1", wordsInList[0].listName)
     }
+
+    @Test
+    fun `test AppDatabase singleton initialization with version 4`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val appDb = AppDatabase.getDatabase(context)
+        assertNotNull(appDb)
+        assertNotNull(appDb.vocabularyDao())
+    }
 }
