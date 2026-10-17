@@ -76,11 +76,14 @@ fun OcrInteractiveScreen(
     isSaveDialogOpen: Boolean,
     showBoundingBoxes: Boolean,
     currentBookTitle: String,
+    availableLists: List<com.example.data.VocabularyListEntity> = emptyList(),
+    activeListId: Long? = null,
     onTapCoordinates: (Float, Float) -> Unit,
     onSelectWordDirectly: (DetectedWord) -> Unit,
     onToggleBoundingBoxes: () -> Unit,
     onCloseSaveDialog: () -> Unit,
-    onSaveWord: (word: String, definition: String, contextSentence: String, bookTitle: String) -> Unit,
+    onCreateNewList: (String, (Long) -> Unit) -> Unit = { _, _ -> },
+    onSaveWord: (word: String, definition: String, contextSentence: String, bookTitle: String, listId: Long, listName: String) -> Unit,
     onSpeak: (String) -> Unit,
     onNavigateToCamera: () -> Unit,
     onLoadSampleBook: (Int) -> Unit
@@ -373,8 +376,11 @@ fun OcrInteractiveScreen(
             WordSaveDialog(
                 detectedWord = selectedWord,
                 initialBookTitle = currentBookTitle,
+                availableLists = availableLists,
+                initialSelectedListId = activeListId,
                 onDismiss = onCloseSaveDialog,
                 onSpeak = onSpeak,
+                onCreateNewList = onCreateNewList,
                 onSave = onSaveWord
             )
         }

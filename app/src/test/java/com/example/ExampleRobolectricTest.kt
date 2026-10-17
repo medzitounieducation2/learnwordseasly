@@ -94,4 +94,32 @@ class ExampleRobolectricTest {
         assertEquals(1, words.size)
         assertEquals("Sérendipité", words[0].word)
     }
+
+    @Test
+    fun `test custom vocabulary lists grouping`() = runBlocking {
+        val dao = db.vocabularyDao()
+        val listId = dao.insertList(
+            com.example.data.VocabularyListEntity(
+                name = "Rome tome 1",
+                description = "Vocabulaire du premier tome"
+            )
+        )
+        assertTrue(listId > 0)
+
+        dao.insert(
+            VocabularyEntity(
+                listId = listId,
+                listName = "Rome tome 1",
+                word = "Centurion",
+                definition = "Officier commandant une centurie.",
+                contextSentence = "Le centurion leva son glaive.",
+                bookTitle = "Rome tome 1"
+            )
+        )
+
+        val wordsInList = dao.getWordsByListId(listId).first()
+        assertEquals(1, wordsInList.size)
+        assertEquals("Centurion", wordsInList[0].word)
+        assertEquals("Rome tome 1", wordsInList[0].listName)
+    }
 }

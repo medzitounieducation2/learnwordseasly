@@ -62,6 +62,10 @@ fun VocabulaireLectureApp(viewModel: MainViewModel) {
     val showDetectedBoxes by viewModel.showDetectedBoxes.collectAsStateWithLifecycle()
     val currentBookTitle by viewModel.currentBookTitle.collectAsStateWithLifecycle()
 
+    val allLists by viewModel.allLists.collectAsStateWithLifecycle()
+    val selectedListId by viewModel.selectedListId.collectAsStateWithLifecycle()
+    val activeListId by viewModel.activeListId.collectAsStateWithLifecycle()
+
     val vocabularyWords by viewModel.vocabularyList.collectAsStateWithLifecycle()
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
     val filterType by viewModel.filterType.collectAsStateWithLifecycle()
@@ -171,6 +175,8 @@ fun VocabulaireLectureApp(viewModel: MainViewModel) {
                         isSaveDialogOpen = isSaveDialogOpen,
                         showBoundingBoxes = showDetectedBoxes,
                         currentBookTitle = currentBookTitle,
+                        availableLists = allLists,
+                        activeListId = activeListId,
                         onTapCoordinates = { x, y ->
                             viewModel.handleTapOnImage(x, y)
                         },
@@ -183,8 +189,11 @@ fun VocabulaireLectureApp(viewModel: MainViewModel) {
                         onCloseSaveDialog = {
                             viewModel.closeSaveDialog()
                         },
-                        onSaveWord = { word, def, context, book ->
-                            viewModel.saveWord(word, def, context, book)
+                        onCreateNewList = { name, callback ->
+                            viewModel.createList(name, onCreated = callback)
+                        },
+                        onSaveWord = { word, def, context, book, listId, listName ->
+                            viewModel.saveWord(word, def, context, book, listId, listName)
                         },
                         onSpeak = { text ->
                             viewModel.speak(text)
@@ -201,10 +210,16 @@ fun VocabulaireLectureApp(viewModel: MainViewModel) {
                 AppTab.VOCABULARY -> {
                     VocabularyListScreen(
                         words = vocabularyWords,
+                        lists = allLists,
+                        selectedListId = selectedListId,
                         searchQuery = searchQuery,
                         filter = filterType,
                         onSearchChange = { viewModel.searchQuery.value = it },
                         onFilterChange = { viewModel.filterType.value = it },
+                        onSelectList = { viewModel.selectList(it) },
+                        onCreateList = { name, desc -> viewModel.createList(name, desc) },
+                        onUpdateList = { viewModel.updateList(it) },
+                        onDeleteList = { viewModel.deleteList(it) },
                         onToggleFavorite = { viewModel.toggleFavorite(it) },
                         onUpdateWord = { viewModel.updateWord(it) },
                         onDeleteWord = { viewModel.deleteWord(it) },

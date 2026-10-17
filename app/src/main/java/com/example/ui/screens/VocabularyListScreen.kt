@@ -1,10 +1,9 @@
 package com.example.ui.screens
 
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,12 +16,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.FormatListBulleted
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Search
@@ -32,14 +35,19 @@ import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedFilterChip
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -58,6 +66,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.VocabularyEntity
+import com.example.data.VocabularyListEntity
 import com.example.ui.VocabFilter
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -65,16 +74,22 @@ import java.util.Locale
 
 /**
  * Écran 3 : Enregistrement et Base de Données Locale (Room Database).
- * Affiche la liste des mots extraits, permet la recherche instantanée,
- * le filtrage (favoris / récents), la révision par cartes mémo et l'édition.
+ * Affiche la liste des mots extraits, regroupés par listes/ouvrages personnalisés,
+ * permet la recherche instantanée, le filtrage, les cartes mémo et l'édition.
  */
 @Composable
 fun VocabularyListScreen(
     words: List<VocabularyEntity>,
+    lists: List<VocabularyListEntity>,
+    selectedListId: Long?,
     searchQuery: String,
     filter: VocabFilter,
     onSearchChange: (String) -> Unit,
     onFilterChange: (VocabFilter) -> Unit,
+    onSelectList: (Long?) -> Unit,
+    onCreateList: (String, String) -> Unit,
+    onUpdateList: (VocabularyListEntity) -> Unit,
+    onDeleteList: (VocabularyListEntity) -> Unit,
     onToggleFavorite: (VocabularyEntity) -> Unit,
     onUpdateWord: (VocabularyEntity) -> Unit,
     onDeleteWord: (VocabularyEntity) -> Unit,
@@ -86,7 +101,17 @@ fun VocabularyListScreen(
     var wordToEdit by remember { mutableStateOf<VocabularyEntity?>(null) }
     var wordToDelete by remember { mutableStateOf<VocabularyEntity?>(null) }
 
+    // Dialogues de gestion des listes
+    var showCreateListDialog by remember { mutableStateOf(false) }
+    var newListName by remember { mutableStateOf("") }
+    var newListDescription by remember { mutableStateOf("") }
+
+    var listToEdit by remember { mutableStateOf<VocabularyListEntity?>(null) }
+    var listToDelete by remember { mutableStateOf<VocabularyListEntity?>(null) }
+
     val dateFormat = remember { SimpleDateFormat("d MMM yyyy", Locale.FRENCH) }
+
+    val currentSelectedList = lists.find { it.id == selectedListId }
 
     Column(
         modifier = Modifier
@@ -111,13 +136,13 @@ fun VocabularyListScreen(
                 ) {
                     Column {
                         Text(
-                            text = "Mon Vocabulaire",
+                            text = if (currentSelectedList != null) currentSelectedList.name else "Mon Vocabulaire",
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
                         )
                         Text(
-                            text = "${words.size} mot${if (words.size > 1) "s" else ""} mémorisé${if (words.size > 1) "s" else ""}",
+                            text = "${words.size} mot${if (words.size > 1) "s" else ""} ${if (currentSelectedList != null) "dans cet ouvrage" else "au total"}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -145,18 +170,20 @@ fun VocabularyListScreen(
                         if (words.isNotEmpty()) {
                             IconButton(
                                 onClick = {
-                                    val summary = StringBuilder("📚 Mon Carnet de Vocabulaire :\n\n")
+                                    val title = currentSelectedList?.name ?: "Mon Carnet de Vocabulaire"
+                                    val summary = StringBuilder("📚 $title :\n\n")
                                     words.forEach {
                                         summary.append("• ${it.word}")
                                         if (it.definition.isNotBlank()) summary.append(" : ${it.definition}")
-                                        if (it.bookTitle.isNotBlank()) summary.append(" (${it.bookTitle})")
+                                        if (it.contextSentence.isNotBlank()) summary.append("\n  « ${it.contextSentence} »")
+                                        if (it.bookTitle.isNotBlank()) summary.append(" — ${it.bookTitle}")
                                         summary.append("\n")
                                     }
                                     val sendIntent = Intent(Intent.ACTION_SEND).apply {
                                         putExtra(Intent.EXTRA_TEXT, summary.toString())
                                         type = "text/plain"
                                     }
-                                    context.startActivity(Intent.createChooser(sendIntent, "Partager mon vocabulaire"))
+                                    context.startActivity(Intent.createChooser(sendIntent, "Partager le vocabulaire"))
                                 },
                                 modifier = Modifier.testTag("share_vocabulary_button")
                             ) {
@@ -165,6 +192,129 @@ fun VocabularyListScreen(
                                     contentDescription = "Partager la liste",
                                     tint = MaterialTheme.colorScheme.primary
                                 )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Sélecteur horizontal des listes / collections
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Listes :",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(end = 8.dp)
+                    )
+
+                    LazyRow(
+                        modifier = Modifier.weight(1f),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Onglet Toutes les listes
+                        item {
+                            FilterChip(
+                                selected = selectedListId == null,
+                                onClick = { onSelectList(null) },
+                                label = { Text("Toutes", fontSize = 12.sp) },
+                                modifier = Modifier.testTag("list_chip_all")
+                            )
+                        }
+
+                        // Chips pour chaque liste créée
+                        items(lists, key = { it.id }) { list ->
+                            FilterChip(
+                                selected = selectedListId == list.id,
+                                onClick = { onSelectList(list.id) },
+                                label = { Text(list.name, fontSize = 12.sp) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                    selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer
+                                ),
+                                modifier = Modifier.testTag("list_chip_${list.id}")
+                            )
+                        }
+
+                        // Bouton + Nouvelle liste
+                        item {
+                            ElevatedFilterChip(
+                                selected = false,
+                                onClick = {
+                                    newListName = ""
+                                    newListDescription = ""
+                                    showCreateListDialog = true
+                                },
+                                label = { Text("Nouvelle", fontSize = 12.sp) },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Add,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp),
+                                        tint = MaterialTheme.colorScheme.secondary
+                                    )
+                                },
+                                modifier = Modifier.testTag("add_list_chip")
+                            )
+                        }
+                    }
+                }
+
+                // Si une liste spécifique est sélectionnée, bandeau d'actions pour la liste
+                if (currentSelectedList != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.35f)
+                        ),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = if (currentSelectedList.description.isNotBlank())
+                                        currentSelectedList.description
+                                    else
+                                        "Liste : ${currentSelectedList.name}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Row {
+                                IconButton(
+                                    onClick = { listToEdit = currentSelectedList },
+                                    modifier = Modifier.size(30.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Edit,
+                                        contentDescription = "Renommer la liste",
+                                        tint = MaterialTheme.colorScheme.secondary,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                                IconButton(
+                                    onClick = { listToDelete = currentSelectedList },
+                                    modifier = Modifier.size(30.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Delete,
+                                        contentDescription = "Supprimer la liste",
+                                        tint = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
                             }
                         }
                     }
@@ -254,6 +404,8 @@ fun VocabularyListScreen(
                     Text(
                         text = if (searchQuery.isNotEmpty())
                             "Aucun mot ne correspond à votre recherche"
+                        else if (currentSelectedList != null)
+                            "Aucun mot dans « ${currentSelectedList.name} »"
                         else
                             "Aucun mot enregistré pour le moment",
                         style = MaterialTheme.typography.titleMedium,
@@ -285,6 +437,7 @@ fun VocabularyListScreen(
                 items(words, key = { it.id }) { item ->
                     VocabularyCard(
                         entity = item,
+                        showListBadge = selectedListId == null,
                         dateString = dateFormat.format(Date(item.timestamp)),
                         onToggleFavorite = { onToggleFavorite(item) },
                         onSpeak = { onSpeak(item.word) },
@@ -296,12 +449,140 @@ fun VocabularyListScreen(
         }
     }
 
-    // Dialogue d'édition de définition
+    // Dialogue Créer une nouvelle liste
+    if (showCreateListDialog) {
+        AlertDialog(
+            onDismissRequest = { showCreateListDialog = false },
+            title = { Text("Nouvelle liste d'ouvrage") },
+            text = {
+                Column {
+                    Text(
+                        text = "Ex: « Rome tome 1 », « Ma voisine me plaît »...",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = newListName,
+                        onValueChange = { newListName = it },
+                        label = { Text("Nom de la liste / ouvrage") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = newListDescription,
+                        onValueChange = { newListDescription = it },
+                        label = { Text("Description ou tome (optionnel)") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (newListName.isNotBlank()) {
+                            onCreateList(newListName.trim(), newListDescription.trim())
+                            showCreateListDialog = false
+                        }
+                    },
+                    enabled = newListName.isNotBlank()
+                ) {
+                    Text("Créer la liste")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCreateListDialog = false }) {
+                    Text("Annuler")
+                }
+            }
+        )
+    }
+
+    // Dialogue Renommer / Modifier la liste
+    if (listToEdit != null) {
+        val editingList = listToEdit!!
+        var editName by remember { mutableStateOf(editingList.name) }
+        var editDesc by remember { mutableStateOf(editingList.description) }
+
+        AlertDialog(
+            onDismissRequest = { listToEdit = null },
+            title = { Text("Modifier la liste") },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = editName,
+                        onValueChange = { editName = it },
+                        label = { Text("Nom") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = editDesc,
+                        onValueChange = { editDesc = it },
+                        label = { Text("Description") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (editName.isNotBlank()) {
+                            onUpdateList(editingList.copy(name = editName.trim(), description = editDesc.trim()))
+                            listToEdit = null
+                        }
+                    },
+                    enabled = editName.isNotBlank()
+                ) {
+                    Text("Enregistrer")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { listToEdit = null }) {
+                    Text("Annuler")
+                }
+            }
+        )
+    }
+
+    // Confirmation suppression de liste
+    if (listToDelete != null) {
+        val deletingList = listToDelete!!
+        AlertDialog(
+            onDismissRequest = { listToDelete = null },
+            title = { Text("Supprimer la liste ?") },
+            text = {
+                Text("Voulez-vous supprimer la liste « ${deletingList.name} » ainsi que les mots qui y sont enregistrés ?")
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onDeleteList(deletingList)
+                        listToDelete = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Supprimer")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { listToDelete = null }) {
+                    Text("Annuler")
+                }
+            }
+        )
+    }
+
+    // Dialogue d'édition d'un mot
     if (wordToEdit != null) {
         val editing = wordToEdit!!
         var newWord by remember { mutableStateOf(editing.word) }
         var newDef by remember { mutableStateOf(editing.definition) }
         var newBook by remember { mutableStateOf(editing.bookTitle) }
+        var newContext by remember { mutableStateOf(editing.contextSentence) }
+        var editListId by remember { mutableStateOf(editing.listId) }
 
         AlertDialog(
             onDismissRequest = { wordToEdit = null },
@@ -313,6 +594,15 @@ fun VocabularyListScreen(
                         onValueChange = { newWord = it },
                         label = { Text("Mot") },
                         singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = newContext,
+                        onValueChange = { newContext = it },
+                        label = { Text("Contexte dans l'ouvrage") },
+                        minLines = 2,
+                        maxLines = 4,
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(modifier = Modifier.height(8.dp))
@@ -336,17 +626,21 @@ fun VocabularyListScreen(
             confirmButton = {
                 Button(
                     onClick = {
+                        val currentListName = lists.find { it.id == editListId }?.name ?: editing.listName
                         onUpdateWord(
                             editing.copy(
                                 word = newWord.trim(),
                                 definition = newDef.trim(),
-                                bookTitle = newBook.trim()
+                                contextSentence = newContext.trim(),
+                                bookTitle = newBook.trim(),
+                                listId = editListId,
+                                listName = currentListName
                             )
                         )
                         wordToEdit = null
                     }
                 ) {
-                    Text("Sauvegarder")
+                    Text("Enregistrer")
                 }
             },
             dismissButton = {
@@ -357,7 +651,7 @@ fun VocabularyListScreen(
         )
     }
 
-    // Confirmation de suppression
+    // Confirmation de suppression d'un mot
     if (wordToDelete != null) {
         AlertDialog(
             onDismissRequest = { wordToDelete = null },
@@ -394,6 +688,7 @@ fun VocabularyListScreen(
 @Composable
 private fun VocabularyCard(
     entity: VocabularyEntity,
+    showListBadge: Boolean,
     dateString: String,
     onToggleFavorite: () -> Unit,
     onSpeak: () -> Unit,
@@ -411,7 +706,7 @@ private fun VocabularyCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            // Ligne supérieure : Mot, Prononciation, Favori
+            // Ligne supérieure : Mot, Prononciation, Badge liste, Favori
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -438,15 +733,33 @@ private fun VocabularyCard(
                     }
                 }
 
-                IconButton(
-                    onClick = onToggleFavorite,
-                    modifier = Modifier.size(36.dp)
-                ) {
-                    Icon(
-                        imageVector = if (entity.isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
-                        contentDescription = "Favori",
-                        tint = if (entity.isFavorite) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.outline
-                    )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (showListBadge && entity.listName.isNotBlank()) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f)
+                        ) {
+                            Text(
+                                text = entity.listName,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(4.dp))
+                    }
+
+                    IconButton(
+                        onClick = onToggleFavorite,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (entity.isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
+                            contentDescription = "Favori",
+                            tint = if (entity.isFavorite) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.outline
+                        )
+                    }
                 }
             }
 
